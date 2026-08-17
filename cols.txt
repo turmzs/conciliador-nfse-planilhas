@@ -1,0 +1,45 @@
+NUMERAÇÃO NOTA
+DATA EMISSAO
+FORNECEDOR
+cnpj_fornecedor
+VALOR DA NOTA
+---
+Número NFS-e
+Data Geração
+CNPJ/CPF Prestador
+Nome Prestador
+CNPJ/CPF Tomador
+Valor do Serviço (R$)
+Insc. Municipal Emitente
+Simples Nacional
+DPS Nº
+DPS Série
+Situação NFS-e
+Tributação do ISSQN
+Município de Incidência
+Desconto Incond. (R$)
+Base de Cálculo (R$)
+Alíquota ISSQN (%)
+Valor do ISSQN (R$)
+Retenção ISSQN
+Cód. Tributação Nacional
+Descrição do Serviço
+Sit. Trib. PIS/COFINS
+BC PIS/COFINS (R$)
+PIS - Alíquota (%)
+PIS - Débito (R$)
+COFINS - Alíquota (%)
+COFINS - Débito (R$)
+Descr. Contrib. Sociais Ret.
+IRRF (R$)
+Contrib. Sociais Ret. (R$)
+Contrib. Previd. Ret. (R$)
+% Total Tributos (SN)
+Insc. Municipal Tomador
+Informações Complementares
+Evento
+Autor do Evento
+Data do Evento
+Data Registro do Evento
+Situação
+Chave NFS-e

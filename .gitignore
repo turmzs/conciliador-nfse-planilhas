@@ -4,3 +4,6 @@
 *.csv
 cols.txt
 TESTES/
+*.spec
+build/
+dist/

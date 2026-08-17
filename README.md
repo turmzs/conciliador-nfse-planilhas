@@ -50,3 +50,4 @@ Se no futuro o layout da Domínio Sistemas mudar (ou se você conseguir exportar
 
 ---
 *Feito para tornar a rotina fiscal rápida, exata e sem estresse.*
+*Criado e pensado por Artur Menezes - turmzs*

@@ -10,50 +10,28 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
     """
     
     # ==============================================================================================
-    # 1. CONFIGURAÇÃO DAS COLUNAS (AJUSTE AQUI CONFORME O NOME EXATO NAS SUAS PLANILHAS)
-    # ==============================================================================================
-    
-    # Colunas comuns ou de chave primária
-    COL_NUM_NF_DOM = 'NUMERAÇÃO NOTA'     # Domínio
-    COL_NUM_NF_PORTAL = 'Número NFS-e'    # Portal Nacional
-    
-    COL_CNPJ_DOM = 'cnpj_fornecedor'      # Domínio
-    COL_CNPJ_PORTAL = 'CNPJ/CPF Prestador'# Portal Nacional
-    
-    # Colunas do relatório da Domínio (Deixe como None se a planilha não tiver a coluna)
-    COL_DOM_STATUS = None                 # Domínio não exportou status nessa planilha
-    COL_DOM_DATA = 'DATA EMISSAO'
-    COL_DOM_VALOR_LIQ = 'VALOR DA NOTA'
-    COL_DOM_VALOR_BRUTO = None
-    COL_DOM_INSS = None
-    COL_DOM_IRRF = None
-    COL_DOM_CSLL = None
-    COL_DOM_PIS = None
-    COL_DOM_COFINS = None
-    COL_DOM_ISS = None
-    
-    # Colunas do relatório do Portal Nacional
-    COL_PORTAL_STATUS = 'Situação NFS-e'
-    COL_PORTAL_DATA = 'Data Geração'
-    COL_PORTAL_VALOR_LIQ = 'Valor do Serviço (R$)'
-    COL_PORTAL_VALOR_BRUTO = None
-    COL_PORTAL_INSS = 'Contrib. Previd. Ret. (R$)'
-    COL_PORTAL_IRRF = 'IRRF (R$)'
-    COL_PORTAL_CSLL = None
-    COL_PORTAL_PIS = 'PIS - Débito (R$)'
-    COL_PORTAL_COFINS = 'COFINS - Débito (R$)'
-    COL_PORTAL_ISS = 'Valor do ISSQN (R$)'
-
-    # Termos usados para identificar nota cancelada
-    STATUS_CANCELADO_PORTAL = ['CANCELADA', 'CANCELADO', 'C']
-    STATUS_ATIVO_DOMINIO = ['NORMAL', 'ATIVA', 'N', 'A']
-    
-    # ==============================================================================================
-    # 2. LEITURA DOS DADOS
+    # 1. LEITURA DOS DADOS E TRATAMENTO DE EXTENSÃO
     # ==============================================================================================
     def read_file(filepath):
-        engine = 'odf' if str(filepath).lower().endswith('.ods') else None
-        return pd.read_excel(filepath, engine=engine)
+        filepath_str = str(filepath).lower()
+        if filepath_str.endswith('.ods'):
+            engine = 'odf'
+        elif filepath_str.endswith('.xls'):
+            engine = 'xlrd'
+        elif filepath_str.endswith('.xlsx'):
+            engine = 'openpyxl'
+        else:
+            engine = None # Deixa o pandas tentar adivinhar
+            
+        try:
+            return pd.read_excel(filepath, engine=engine)
+        except ValueError as e:
+            if "Excel file format cannot be determined" in str(e):
+                try:
+                    return pd.read_csv(filepath, sep=';', encoding='latin-1')
+                except:
+                    pass
+            raise e
 
     print("\n=======================================================")
     print("[DEBUG] INICIANDO CONCILIAÇÃO")
@@ -62,6 +40,50 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
     df_dom = read_file(caminho_dominio)
     print(f"[*] Lendo Portal: {caminho_portal}")
     df_portal = read_file(caminho_portal)
+
+    # ==============================================================================================
+    # 2. DESCOBERTA DINÂMICA DE COLUNAS (UNIVERSAL)
+    # ==============================================================================================
+    def get_column(df, possible_names, required=False):
+        for name in possible_names:
+            for col in df.columns:
+                if str(col).strip().lower() == str(name).lower():
+                    return col
+        if required:
+            raise KeyError(f"Coluna obrigatória não encontrada.\nProcurado por: {possible_names}\nDisponíveis no arquivo: {list(df.columns)}")
+        return None
+
+    # Domínio - Mapeamento flexível
+    COL_NUM_NF_DOM = get_column(df_dom, ['NUMERAÇÃO NOTA', 'documento_inicial', 'numero_nota', 'nota', 'numero'], required=True)
+    COL_CNPJ_DOM = get_column(df_dom, ['cnpj_fornecedor', 'cnpj_empresa', 'cnpj', 'cpf/cnpj'], required=True)
+    COL_DOM_DATA = get_column(df_dom, ['DATA EMISSAO', 'data_emissao', 'data_entrada'])
+    COL_DOM_VALOR_LIQ = get_column(df_dom, ['VALOR DA NOTA', 'valor_contabil', 'valor_liquido', 'valor'], required=True)
+    COL_DOM_STATUS = get_column(df_dom, ['situacao', 'status'])
+    COL_DOM_VALOR_BRUTO = None
+    COL_DOM_INSS = get_column(df_dom, ['valor_inss', 'retencao_inss'])
+    COL_DOM_IRRF = get_column(df_dom, ['valor_irrf', 'retencao_irrf'])
+    COL_DOM_CSLL = get_column(df_dom, ['valor_csll', 'retencao_csll'])
+    COL_DOM_PIS = get_column(df_dom, ['valor_pis', 'retencao_pis'])
+    COL_DOM_COFINS = get_column(df_dom, ['valor_cofins', 'retencao_cofins'])
+    COL_DOM_ISS = get_column(df_dom, ['valor_iss', 'retencao_iss', 'valor_imposto', 'iss'])
+
+    # Portal Nacional - Mapeamento flexível (lida com problemas de encode também)
+    COL_NUM_NF_PORTAL = get_column(df_portal, ['Número NFS-e', 'Nmero NFS-e', 'Numero'], required=True)
+    COL_CNPJ_PORTAL = get_column(df_portal, ['CNPJ/CPF Prestador', 'CNPJ Prestador', 'CNPJ/CPF Tomador'], required=True)
+    COL_PORTAL_DATA = get_column(df_portal, ['Data Geração', 'Data Gerao', 'Competência', 'Competncia'])
+    COL_PORTAL_VALOR_LIQ = get_column(df_portal, ['Valor do Serviço (R$)', 'Valor do Servio (R$)', 'Valor'], required=True)
+    COL_PORTAL_STATUS = get_column(df_portal, ['Situação NFS-e', 'Situao NFS-e', 'Situação'])
+    COL_PORTAL_VALOR_BRUTO = None
+    COL_PORTAL_INSS = get_column(df_portal, ['Contrib. Previd. Ret. (R$)', 'INSS'])
+    COL_PORTAL_IRRF = get_column(df_portal, ['IRRF (R$)'])
+    COL_PORTAL_CSLL = None
+    COL_PORTAL_PIS = get_column(df_portal, ['PIS - Débito (R$)', 'PIS - Dbito (R$)'])
+    COL_PORTAL_COFINS = get_column(df_portal, ['COFINS - Débito (R$)', 'COFINS - Dbito (R$)'])
+    COL_PORTAL_ISS = get_column(df_portal, ['Valor do ISSQN (R$)', 'ISSQN'])
+
+    # Termos usados para identificar nota cancelada
+    STATUS_CANCELADO_PORTAL = ['CANCELADA', 'CANCELADO', 'C']
+    STATUS_ATIVO_DOMINIO = ['NORMAL', 'ATIVA', 'N', 'A']
     
     # Limpar linhas nulas ou de "Total" que vêm no final dos relatórios
     df_dom = df_dom.dropna(subset=[COL_NUM_NF_DOM])
@@ -72,14 +94,8 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
 
     print(f"[DEBUG] Total de notas reais lidas - Domínio: {len(df_dom)} | Portal: {len(df_portal)}")
 
-    # Validar se as colunas primárias existem
-    for col, nome_df in [(COL_NUM_NF_DOM, 'Domínio'), (COL_CNPJ_DOM, 'Domínio'),
-                         (COL_NUM_NF_PORTAL, 'Portal'), (COL_CNPJ_PORTAL, 'Portal')]:
-        if col not in (df_dom.columns if nome_df == 'Domínio' else df_portal.columns):
-            raise KeyError(f"A coluna '{col}' obrigatória não foi encontrada na planilha do {nome_df}.")
-
     # ==============================================================================================
-    # TRATAMENTO DE CHAVES DE BUSCA (EVITAR FALSOS NEGATIVOS)
+    # 3. TRATAMENTO DE CHAVES DE BUSCA (EVITAR FALSOS NEGATIVOS)
     # ==============================================================================================
     def limpar_chave(serie):
         # Converte para string, tira espaços, tira .0 se o pandas leu como float, e remove não-números (ex: pontuação de CNPJ)
@@ -116,7 +132,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
             return 0.0
 
     # ==============================================================================================
-    # 3. IDENTIFICAÇÃO DE NOTAS FALTANTES (ÓRFÃS)
+    # 4. IDENTIFICAÇÃO DE NOTAS FALTANTES (ÓRFÃS)
     # ==============================================================================================
     chaves_dom = set(df_dom['Chave_Busca'])
     chaves_portal = set(df_portal['Chave_Busca'])
@@ -131,7 +147,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
     df_faltantes_portal = df_dom[df_dom['Chave_Busca'].isin(chaves_faltantes_portal)].copy()
 
     # ==============================================================================================
-    # 4. CRUZAMENTO DE DADOS (MATCH)
+    # 5. CRUZAMENTO DE DADOS (MATCH)
     # ==============================================================================================
     chaves_comuns = chaves_dom.intersection(chaves_portal)
     
@@ -167,7 +183,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
 
         divergencias_encontradas = []
 
-        # 4.1 Auditoria de Status (Cancelamentos)
+        # 5.1 Auditoria de Status (Cancelamentos)
         status_dom = "N/A"
         status_portal = "N/A"
         
@@ -186,7 +202,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
                 })
                 continue # Pula validações de valor
 
-        # 4.2 Auditoria de Datas
+        # 5.2 Auditoria de Datas
         if COL_DOM_DATA and COL_PORTAL_DATA:
             data_dom = pd.to_datetime(row_dom.get(COL_DOM_DATA), dayfirst=True, errors='coerce')
             data_portal = pd.to_datetime(row_portal.get(COL_PORTAL_DATA), dayfirst=True, errors='coerce')
@@ -194,7 +210,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
             if pd.notnull(data_dom) and pd.notnull(data_portal) and data_dom != data_portal:
                 divergencias_encontradas.append(f"Data Domínio: {data_dom.date()} | Data Portal: {data_portal.date()}")
 
-        # 4.3 Auditoria de Valores
+        # 5.3 Auditoria de Valores
         for col_d, col_p, nome_legivel in colunas_comparar:
             val_d = round(parse_valor(row_dom.get(col_d, 0)), 2)
             val_p = round(parse_valor(row_portal.get(col_p, 0)), 2)
@@ -225,7 +241,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
     df_tudo_certo = pd.DataFrame(lista_tudo_certo)
 
     # ==============================================================================================
-    # 5. GERAÇÃO DO RELATÓRIO DE SAÍDA
+    # 6. GERAÇÃO DO RELATÓRIO DE SAÍDA E RESUMO
     # ==============================================================================================
     
     # Criar um resumo geral
@@ -288,14 +304,14 @@ class ConciliadorGUI:
         tk.Label(root, text="Conciliação Domínio Sistemas vs Portal NFS-e", font=("Arial", 14, "bold")).pack(pady=10)
         
         # Seleção Domínio
-        tk.Label(root, text="Planilha Domínio Sistemas (.xlsx, .ods):", font=("Arial", 10)).pack(anchor="w", padx=20)
+        tk.Label(root, text="Planilha Domínio Sistemas (.xlsx, .xls, .ods):", font=("Arial", 10)).pack(anchor="w", padx=20)
         frame_dom = tk.Frame(root)
         frame_dom.pack(fill="x", padx=20, pady=5)
         tk.Entry(frame_dom, textvariable=self.caminho_dominio, state='readonly').pack(side=tk.LEFT, fill="x", expand=True, padx=(0, 10))
         tk.Button(frame_dom, text="Procurar", command=self.selecionar_dominio, width=10).pack(side=tk.RIGHT)
         
         # Seleção Portal
-        tk.Label(root, text="Planilha Portal Nacional (.xlsx, .ods):", font=("Arial", 10)).pack(anchor="w", padx=20)
+        tk.Label(root, text="Planilha Portal Nacional (.xlsx, .xls, .ods):", font=("Arial", 10)).pack(anchor="w", padx=20)
         frame_portal = tk.Frame(root)
         frame_portal.pack(fill="x", padx=20, pady=5)
         tk.Entry(frame_portal, textvariable=self.caminho_portal, state='readonly').pack(side=tk.LEFT, fill="x", expand=True, padx=(0, 10))
@@ -334,7 +350,7 @@ class ConciliadorGUI:
             conciliar_nfse(self.caminho_dominio.get(), self.caminho_portal.get(), self.caminho_saida.get())
             messagebox.showinfo("Sucesso", f"Conciliação concluída!\n\nRelatório salvo em:\n{self.caminho_saida.get()}")
         except KeyError as e:
-            messagebox.showerror("Erro de Coluna", f"Erro: {str(e)}\n\nVerifique se as planilhas estão no formato esperado.")
+            messagebox.showerror("Erro de Coluna", f"Erro: {str(e)}\n\nO layout da planilha mudou ou as colunas esperadas não estão presentes.")
         except Exception as e:
             messagebox.showerror("Erro Inesperado", f"Ocorreu um erro durante a conciliação:\n{str(e)}")
 

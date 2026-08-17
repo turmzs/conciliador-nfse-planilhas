@@ -45,18 +45,30 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
     # 2. DESCOBERTA DINÂMICA DE COLUNAS (UNIVERSAL)
     # ==============================================================================================
     def get_column(df, possible_names, required=False):
+        """Encontra a primeira coluna correspondente que tenha dados reais. Pula colunas vazias."""
+        first_match = None
         for name in possible_names:
             for col in df.columns:
                 if str(col).strip().lower() == str(name).lower():
-                    return col
+                    non_null = int(df[col].notna().sum())
+                    if non_null > 0:
+                        print(f"[DEBUG] Coluna mapeada: '{col}' ({non_null} linhas com dados)")
+                        return col
+                    if first_match is None:
+                        first_match = col
+        
+        if first_match:
+            print(f"[DEBUG] Coluna mapeada (sem dados): '{first_match}'")
+            return first_match
+        
         if required:
             raise KeyError(f"Coluna obrigatória não encontrada.\nProcurado por: {possible_names}\nDisponíveis no arquivo: {list(df.columns)}")
         return None
 
-    # Domínio - Mapeamento flexível
+    # Domínio - Mapeamento flexível (cobre tomados E prestados)
     COL_NUM_NF_DOM = get_column(df_dom, ['NUMERAÇÃO NOTA', 'documento_inicial', 'numero_nota', 'nota', 'numero'], required=True)
-    COL_CNPJ_DOM = get_column(df_dom, ['cnpj_fornecedor', 'cnpj_empresa', 'cnpj', 'cpf/cnpj'], required=True)
-    COL_DOM_DATA = get_column(df_dom, ['DATA EMISSAO', 'data_emissao', 'data_entrada'])
+    COL_CNPJ_DOM = get_column(df_dom, ['cnpj_fornecedor', 'cnpj_cliente', 'cnpj_empresa', 'cnpj', 'cpf/cnpj'], required=True)
+    COL_DOM_DATA = get_column(df_dom, ['DATA EMISSAO', 'data_emissao', 'data_servico', 'data_entrada'])
     COL_DOM_VALOR_LIQ = get_column(df_dom, ['VALOR DA NOTA', 'valor_contabil', 'valor_liquido', 'valor'], required=True)
     COL_DOM_STATUS = get_column(df_dom, ['situacao', 'status'])
     COL_DOM_VALOR_BRUTO = None
@@ -67,7 +79,7 @@ def conciliar_nfse(caminho_dominio, caminho_portal, caminho_saida):
     COL_DOM_COFINS = get_column(df_dom, ['valor_cofins', 'retencao_cofins'])
     COL_DOM_ISS = get_column(df_dom, ['valor_iss', 'retencao_iss', 'valor_imposto', 'iss'])
 
-    # Portal Nacional - Mapeamento flexível (lida com problemas de encode também)
+    # Portal Nacional - Mapeamento flexível (cobre tomados E prestados)
     COL_NUM_NF_PORTAL = get_column(df_portal, ['Número NFS-e', 'Nmero NFS-e', 'Numero'], required=True)
     COL_CNPJ_PORTAL = get_column(df_portal, ['CNPJ/CPF Prestador', 'CNPJ Prestador', 'CNPJ/CPF Tomador'], required=True)
     COL_PORTAL_DATA = get_column(df_portal, ['Data Geração', 'Data Gerao', 'Competência', 'Competncia'])

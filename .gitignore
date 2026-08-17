@@ -1,4 +1,6 @@
 *.xls
+*.xlsx
 *.ods
+*.csv
 cols.txt
 TESTES/

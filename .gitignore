@@ -7,3 +7,6 @@ TESTES/
 *.spec
 build/
 dist/
+email.config.example
+prompt
+test_melhorias.py
